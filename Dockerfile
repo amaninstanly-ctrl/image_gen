@@ -1,27 +1,24 @@
-FROM ubuntu:22.04
+FROM python:3.11-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
-
+# Set working directory
 WORKDIR /app
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    python3 \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
-
-# Copy files
+# Install dependencies first (layer cache)
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy app
+COPY app.py .
 
-# Expose port
+# Railway injects PORT at runtime — gunicorn reads it via shell
+ENV PORT=8080
+
 EXPOSE 8080
 
-# Start everything
-CMD bash -c "ollama serve & sleep 15 && ollama pull x/z-image-turbo && gunicorn -b 0.0.0.0:8080 app:app"
+# Use gunicorn for production on Railway
+CMD gunicorn app:app \
+    --bind 0.0.0.0:${PORT} \
+    --workers 2 \
+    --timeout 300 \
+    --keep-alive 5 \
+    --log-level info
